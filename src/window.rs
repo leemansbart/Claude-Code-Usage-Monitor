@@ -293,7 +293,7 @@ const DIVIDER_RIGHT_MARGIN: i32 = 10;
 const LABEL_WIDTH: i32 = 18;
 const LABEL_RIGHT_MARGIN: i32 = 10;
 const BAR_RIGHT_MARGIN: i32 = 4;
-const TEXT_WIDTH: i32 = 82;
+const TEXT_WIDTH: i32 = 92;
 const RIGHT_MARGIN: i32 = 1;
 const WIDGET_HEIGHT: i32 = 36;
 
@@ -655,8 +655,8 @@ fn paint_content(
         let _ = DeleteObject(right_brush);
 
         let content_x = sc(LEFT_DIVIDER_W) + sc(DIVIDER_RIGHT_MARGIN);
-        let row1_y = sc(4);
-        let row2_y = sc(4) + sc(SEGMENT_H) + sc(4);
+        let row1_y = sc(5);
+        let row2_y = sc(5) + sc(SEGMENT_H) + sc(4);
 
         let _ = SetBkMode(hdc, TRANSPARENT);
         let _ = SetTextColor(hdc, COLORREF(text_color.to_colorref()));

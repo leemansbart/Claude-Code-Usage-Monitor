@@ -357,7 +357,7 @@ pub fn format_line(section: &UsageSection) -> String {
     if cd.is_empty() {
         pct
     } else {
-        format!("{pct}  \u{00b7}  {:>3}", cd)
+        format!("{pct}  \u{00b7}  {:>4}", cd)
     }
 }
 
@@ -378,9 +378,11 @@ fn format_countdown(resets_at: Option<SystemTime>) -> String {
     let total_days = total_secs / 86400;
 
     if total_days >= 1 {
-        format!("{total_days}d")
+        let remaining_hours = (total_secs % 86400) / 3600;
+        format!("{total_days}d{remaining_hours:02}")
     } else if total_mins > 61 {
-        format!("{total_hours}h")
+        let remaining_mins = (total_secs % 3600) / 60;
+        format!("{total_hours}h{remaining_mins:02}")
     } else if total_secs > 60 {
         format!("{total_mins}m")
     } else {
