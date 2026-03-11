@@ -8,6 +8,23 @@ A lightweight Windows taskbar widget that displays your Claude API rate limit us
 
 ![Screenshot](.github/screenshot.png)
 
+## Fork changes
+
+This fork optimizes the widget for single-line Windows 11 taskbars:
+
+| Dark mode | Light mode |
+|-----------|------------|
+| ![Dark](.github/screenshot-dark.png) | ![Light](.github/screenshot-light.png) |
+
+Changes from upstream:
+
+- **Compact layout** — Widget height reduced from 46px to 36px to fit single-line taskbars
+- **Better font** — Cascadia Mono at 11pt (medium weight) for improved small-size readability
+- **System text color** — White in dark mode, near-black in light mode, matching the Windows clock
+- **Right-aligned values** — Percentages and countdowns align consistently across rows
+- **Detailed countdown** — Shows hours+minutes (`3h12`) and days+hours (`1d11`) instead of rounded values
+- **Improved spacing** — More breathing room around the separator, vertically centered rows
+
 ## What it does
 
 Embeds directly into the Windows taskbar and shows two progress bars:
