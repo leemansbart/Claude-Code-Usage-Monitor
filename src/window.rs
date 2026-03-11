@@ -283,7 +283,7 @@ fn set_startup_enabled(enable: bool) {
 
 // Dimensions matching the C# version
 const SEGMENT_W: i32 = 10;
-const SEGMENT_H: i32 = 13;
+const SEGMENT_H: i32 = 11;
 const SEGMENT_GAP: i32 = 1;
 const SEGMENT_COUNT: i32 = 10;
 const CORNER_RADIUS: i32 = 2;
@@ -293,9 +293,9 @@ const DIVIDER_RIGHT_MARGIN: i32 = 10;
 const LABEL_WIDTH: i32 = 18;
 const LABEL_RIGHT_MARGIN: i32 = 10;
 const BAR_RIGHT_MARGIN: i32 = 4;
-const TEXT_WIDTH: i32 = 62;
+const TEXT_WIDTH: i32 = 82;
 const RIGHT_MARGIN: i32 = 1;
-const WIDGET_HEIGHT: i32 = 46;
+const WIDGET_HEIGHT: i32 = 36;
 
 fn total_widget_width() -> i32 {
     sc(LEFT_DIVIDER_W)
@@ -503,9 +503,9 @@ fn render_layered() {
         Color::from_hex("#AAAAAA")
     };
     let text_color = if is_dark {
-        Color::from_hex("#888888")
+        Color::from_hex("#FFFFFF")
     } else {
-        Color::from_hex("#404040")
+        Color::from_hex("#1A1A1A")
     };
     let bg_color = if is_dark {
         Color::from_hex("#1C1C1C")
@@ -655,15 +655,15 @@ fn paint_content(
         let _ = DeleteObject(right_brush);
 
         let content_x = sc(LEFT_DIVIDER_W) + sc(DIVIDER_RIGHT_MARGIN);
-        let row1_y = sc(5);
-        let row2_y = sc(5) + sc(SEGMENT_H) + sc(10);
+        let row1_y = sc(4);
+        let row2_y = sc(4) + sc(SEGMENT_H) + sc(4);
 
         let _ = SetBkMode(hdc, TRANSPARENT);
         let _ = SetTextColor(hdc, COLORREF(text_color.to_colorref()));
 
-        let font_name = native_interop::wide_str("Segoe UI");
+        let font_name = native_interop::wide_str("Cascadia Mono");
         let font = CreateFontW(
-            sc(-12),
+            sc(-11),
             0,
             0,
             0,
@@ -1343,9 +1343,9 @@ fn paint(hdc: HDC, hwnd: HWND) {
         Color::from_hex("#AAAAAA")
     };
     let text_color = if is_dark {
-        Color::from_hex("#888888")
+        Color::from_hex("#FFFFFF")
     } else {
-        Color::from_hex("#404040")
+        Color::from_hex("#1A1A1A")
     };
     let bg_color = if is_dark {
         Color::from_hex("#1C1C1C")

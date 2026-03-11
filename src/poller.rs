@@ -352,12 +352,12 @@ fn is_leap(y: u64) -> bool {
 
 /// Format a usage section as "X% · Yh" style text
 pub fn format_line(section: &UsageSection) -> String {
-    let pct = format!("{:.0}%", section.percentage);
+    let pct = format!("{:>3.0} %", section.percentage);
     let cd = format_countdown(section.resets_at);
     if cd.is_empty() {
         pct
     } else {
-        format!("{pct} \u{00b7} {cd}")
+        format!("{pct}  \u{00b7}  {:>3}", cd)
     }
 }
 
