@@ -357,7 +357,7 @@ pub fn format_line(section: &UsageSection) -> String {
     if cd.is_empty() {
         pct
     } else {
-        format!("{pct}  \u{00b7}  {:>4}", cd)
+        format!("{pct}  \u{00b7}  {:>5}", cd)
     }
 }
 
