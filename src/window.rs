@@ -1470,7 +1470,7 @@ fn draw_row(
             hdc,
             &mut text_wide,
             &mut text_rect,
-            DT_LEFT | DT_VCENTER | DT_SINGLELINE,
+            DT_RIGHT | DT_VCENTER | DT_SINGLELINE,
         );
     }
 }
