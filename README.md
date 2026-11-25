@@ -1,89 +1,162 @@
 # Claude Code Usage Monitor
 
-A lightweight Windows taskbar widget that displays your Claude API rate limit usage in real time.
-
 ![Windows](https://img.shields.io/badge/platform-Windows-blue)
-![Rust](https://img.shields.io/badge/language-Rust-orange)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-![Screenshot](.github/screenshot.png)
+A lightweight, open-source Windows taskbar widget for monitoring Claude Code usage limits and reset times. It can also display usage for Codex, Google Antigravity, OpenCode Go, Cursor, Grok Build, and GitHub Copilot.
 
-## Fork changes
+See the [user guide](USER_GUIDE.md) for theme customisation and everyday settings,
+or the [changelog](CHANGELOG.md) for version history and notable changes.
 
-This fork optimizes the widget for single-line Windows 11 taskbars:
+![Claude Code Usage Monitor running in the Windows taskbar](.github/animation.gif)
 
-| Dark mode | Light mode |
-|-----------|------------|
-| ![Dark](.github/screenshot-dark.png) | ![Light](.github/screenshot-light.png) |
+## Features
 
-Changes from upstream:
-
-- **Compact layout** — Widget height reduced from 46px to 36px to fit single-line taskbars
-- **Better font** — Cascadia Mono at 11pt (medium weight) for improved small-size readability
-- **System text color** — White in dark mode, near-black in light mode, matching the Windows clock
-- **Right-aligned values** — Percentages and countdowns align consistently across rows
-- **Detailed countdown** — Shows hours+minutes (`3h12`) and days+hours (`1d11`) instead of rounded values
-- **Improved spacing** — More breathing room around the separator, vertically centered rows
-
-## What it does
-
-Embeds directly into the Windows taskbar and shows two progress bars:
-
-- **5h** — Session usage (5-hour rolling window)
-- **7d** — Weekly usage (7-day rolling window)
-
-Each bar shows the current utilization percentage and a countdown until the rate limit resets.
-
-## How it works
-
-1. Reads your Claude OAuth token from `~/.claude/.credentials.json` (automatically refreshes expired tokens via the Claude CLI)
-2. Queries the dedicated Anthropic OAuth usage endpoint (`/api/oauth/usage`) for utilization data
-3. Falls back to the Messages API with rate limit header parsing (`anthropic-ratelimit-unified-*`) if the usage endpoint is unavailable
-4. Renders the widget using Win32 GDI, embedded as a child window of the taskbar
-5. Polls every 15 minutes by default (adjustable via context menu) and updates countdown timers between polls
-
-The widget automatically detects dark/light mode from Windows system settings. You can drag the left divider to reposition the widget along the taskbar. Settings (position and poll frequency) are persisted to `%APPDATA%\ClaudeCodeUsageMonitor\settings.json`.
+- Displays current usage and time remaining until each limit resets
+- Counts usage up from zero or down from the full allowance, whichever you prefer
+- Supports Claude Code, Codex, Google Antigravity, OpenCode Go, Cursor, Grok Build, and GitHub Copilot
+- Supports multiple accounts for Claude Code and Codex
+- Lives in the Windows taskbar with quick controls in the system tray
+- Supports multiple monitors and Windows startup
+- Includes configurable refresh intervals, providers, languages, and updates
+- Provides built-in themes and a visual Theme Studio for custom layouts
+- Collects no analytics or telemetry
 
 ## Requirements
 
-- Windows 10/11
-- [Rust toolchain](https://rustup.rs/) (MSVC target)
-- An active Claude Pro/Team subscription with OAuth credentials stored by [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
+- Windows 10 or Windows 11
+- At least one supported provider installed and signed in
 
-## Building
+Claude Code credentials can be detected from the CLI, Claude desktop app, or WSL. Other providers are optional and can be enabled independently from the dashboard.
 
-```bash
-cargo build --release
+## Installation
+
+Install the latest release with WinGet:
+
+```powershell
+winget install CodeZeno.ClaudeCodeUsageMonitor
 ```
 
-The binary will be at `target/release/claude-code-usage-monitor.exe`.
+Alternatively, download `claude-code-usage-monitor.exe` from [GitHub Releases](https://github.com/CodeZeno/Claude-Code-Usage-Monitor/releases).
+
+Chocolatey packaging is prepared for publication to the community repository;
+availability depends on its first submission being approved. See
+[Chocolatey installation and release notes](docs/chocolatey.md) for commands,
+upgrade behavior, and publication details.
+
+See [updater verification](docs/updater.md) for the portable updater's integrity checks and trust boundary.
 
 ## Usage
 
-Run the executable — the widget appears in your taskbar.
+Start the monitor:
 
-- **Drag** the left divider to reposition the widget along the taskbar
-- **Right-click** for a context menu with **Refresh**, **Update Frequency**, **Settings** (Start with Windows, Reset Position), and **Exit**
-
-## Project structure
-
-```
-src/
-├── main.rs            # Entry point
-├── models.rs          # UsageData / UsageSection types
-├── poller.rs          # API polling, header parsing, formatting
-├── window.rs          # Win32 window, rendering, message loop
-├── native_interop.rs  # Win32 helper functions (taskbar, colors, etc.)
-└── theme.rs           # Dark/light mode detection via registry
+```powershell
+claude-code-usage-monitor
 ```
 
-## Releases
+Open the settings dashboard directly:
 
-Pre-built Windows executables are available on the [Releases](../../releases) page. Download `claude-code-usage-monitor.exe` and run it directly — no Rust toolchain required.
-
-New releases are published automatically when a version tag is pushed:
-
-```bash
-git tag v1.0.0
-git push origin v1.0.0
+```powershell
+claude-code-usage-monitor --dashboard
 ```
+
+Use the dashboard to select providers, change the refresh interval, choose a display, enable startup, or customize the widget. **Settings > Display > Usage direction** switches the default theme and other themes that support this setting between showing what has been used and what is left, with Used as the default. Selecting Remaining makes a fresh limit read 100% and drain as you work.
+
+Theme authors can opt in with `.display` bindings, including `{claude.session.display:usage_line}` and `{claude.session.display:usage_badge}`. Existing `.percentage`, `.remaining`, and unsuffixed usage summaries keep their meaning; warning thresholds should continue to use `.percentage`.
+
+In the default theme, left-click a provider tray icon to show or hide the widget and right-click it to open the menu.
+
+## Provider setup
+
+| Provider | Setup |
+| --- | --- |
+| Claude Code | Sign in with the Claude Code CLI or desktop app. Windows and WSL credentials are detected automatically. |
+| Codex | Install and sign in to the Codex CLI, then enable Codex in **Providers**. |
+| Google Antigravity | Sign in to Antigravity, then enable it in **Providers**. |
+| OpenCode Go | Connect an OpenCode Go account, configure the credentials described below, then enable OpenCode in **Providers**. |
+| Cursor | Sign in to Cursor, then enable it in **Providers**. The local session is detected automatically. |
+| Grok Build | Run `grok login` in the Grok Build CLI, then enable Grok in **Providers**. The signed-in session is detected automatically. |
+| GitHub Copilot | Sign in with the Copilot CLI (`copilot`, then `/login`) or the GitHub CLI (`gh auth login`), then enable Copilot in **Providers**. The stored login is detected automatically. |
+
+For OpenCode Go, set `OPENCODE_GO_WORKSPACE_ID` and `OPENCODE_GO_AUTH_COOKIE`, or create `%APPDATA%\opencode-go\config.json`:
+
+```json
+{
+  "workspaceId": "wrk_01...",
+  "authCookie": "__Host-console_session=your-session-cookie-value"
+}
+```
+
+The workspace ID is part of the OpenCode Go console URL: `https://opencode.ai/console/<workspaceId>/go`. Copy the `__Host-console_session` cookie from an authenticated `opencode.ai` browser session, including its name as shown above. A full Cookie header containing `__Host-console_session` or the legacy `auth` cookie is also accepted unchanged; no empty `auth=;` prefix is needed. Bare legacy `auth` cookie values remain supported. These formats work for both `authCookie` and `OPENCODE_GO_AUTH_COOKIE`. Set `OPENCODE_GO_CONFIG_FILE` to use a different config path. The monitor reads usage from the console JSON API using this workspace ID and cookie.
+
+For Cursor, `CURSOR_SESSION_TOKEN` can override the automatically detected local session.
+
+Grok Build usage comes from the session the CLI stores in `%USERPROFILE%\.grok\auth.json`, read through the same billing endpoint as the CLI's own `/usage` panel. Set `GROK_HOME` if the CLI keeps its home directory elsewhere. Only xAI sign-in entries are used; corporate identity-provider tokens and stored API keys are excluded. A bare `XAI_API_KEY` is not enough: the shared weekly allowance is only readable with a signed-in session. Grok reports one pool per billing period rather than a five-hour window, so the monitor shows it on the long-window row alongside the other providers, leaving the short-window row empty. On-demand spending replaces the pool on that row once any is used, as it already does for Claude Code and Codex.
+
+GitHub Copilot usage comes from `api.github.com/copilot_internal/user`, the endpoint Copilot's own editors and CLI read. The monitor uses the first GitHub login that endpoint accepts, in this order: the `COPILOT_GITHUB_TOKEN`, `GH_TOKEN`, or `GITHUB_TOKEN` environment variable, the Copilot CLI login, then the GitHub CLI login, both read from Windows Credential Manager. Copilot spends one premium-request pool per calendar month, so the monitor shows it on the long-window row and leaves the short-window row empty. Metered chat and completion allowances, as on Copilot Free, are available to themes through `copilot.limits.chat` and `copilot.limits.completions`.
+
+## Data and privacy
+
+The monitor reads local sign-in credentials for enabled providers and sends usage requests directly to their official services. It has no backend service, collects no telemetry, and does not upload credentials or project files.
+
+Credentials are read without modifying the provider files that contain them. When Grok Build rejects a stored token, the monitor asks the Grok CLI to refresh its own session rather than rewriting `auth.json` itself. OpenCode Go credentials saved in a JSON configuration file are plain text and should be protected like a browser session cookie.
+
+## Troubleshooting
+
+Hover over the tray icon for the latest failure reason, or check the account
+status under **Settings > Providers > Accounts**. Missing credentials, expired
+or rejected logins, network failures, HTTP errors, and unexpected usage responses
+have distinct messages. Sign in again using the Claude desktop app or the CLI
+that owns the affected account, then refresh the monitor.
+
+Open **Diagnostics** in the dashboard and enable recording to inspect or copy
+polling errors. Logging is optional; enable it before reproducing the problem.
+
+Run diagnostics with:
+
+```powershell
+claude-code-usage-monitor --diagnose
+```
+
+The diagnostic log is written to `%TEMP%\claude-code-usage-monitor.log`. Application settings are stored in `%APPDATA%\ClaudeCodeUsageMonitor\settings.json`.
+
+If the app unexpectedly closes because of a Rust panic, it automatically appends
+the panic message, source location, and thread details to the same log, even when
+diagnostic recording is off. Copy the log before starting a new `--diagnose`
+session, which clears it. Review and redact credentials, account identifiers,
+and personal information before sharing relevant excerpts in a crash report.
+Report suspected vulnerabilities privately using [SECURITY.md](SECURITY.md).
+
+## Build from source
+
+Install [Rust via rustup](https://www.rust-lang.org/tools/install), then run:
+
+```powershell
+cargo build --release
+```
+
+The repository pins Rust 1.95.0 in `rust-toolchain.toml`; rustup automatically
+selects this version. CI uses the same version. When upgrading Rust, update
+`rust-toolchain.toml`, `.github/workflows/release.yml`, and the `rust-version`
+in `Cargo.toml` together.
+
+The executable will be created at `target\release\claude-code-usage-monitor.exe`.
+
+Windows MSVC builds statically link the C runtime through `.cargo/config.toml`,
+including release builds in CI. The executable does not require a separate
+Microsoft Visual C++ Redistributable installation; it still uses built-in Windows
+system libraries.
+
+See [dependency security](docs/dependency-security.md) for automated dependency
+updates, CI security checks, and the commands to run those checks locally.
+
+## Contributing and community
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, reporting bugs,
+and submitting pull requests, and follow our [Code of Conduct](CODE_OF_CONDUCT.md).
+For suspected vulnerabilities or credential exposure, use the private reporting
+instructions in our [security policy](SECURITY.md).
+
+## License
+
+Licensed under the [MIT License](LICENSE).
