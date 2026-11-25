@@ -2840,6 +2840,8 @@ pub fn validate_template(template: &str, context: &DataContext) -> Vec<String> {
         if context.get_string(expression).is_some()
             || (format.eq_ignore_ascii_case("usage_line")
                 && format_usage_line(expression, context).is_some())
+            || (format.eq_ignore_ascii_case("usage_line_hm")
+                && format_usage_line_with(expression, context, "duration_hm").is_some())
             || (format.eq_ignore_ascii_case("usage_badge")
                 && format_usage_badge(expression, context).is_some())
         {

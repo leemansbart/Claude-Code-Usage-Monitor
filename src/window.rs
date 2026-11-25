@@ -3430,7 +3430,11 @@ fn schedule_countdown_timer() {
             .min()
     });
     // The tray tooltip is a fixed string: rewrite it when one of the reset
-    // countdowns it shows changes, including Claude's model limits.
+    // countdowns it shows changes, including Claude's model limits. These
+    // steps match `duration_hm`, so this also repaints `usage_line_hm` for the
+    // active accounts of enabled providers each minute; `widget_delay` alone
+    // follows `duration_short`, which above an hour repaints only at whole
+    // hours or days.
     let now = SystemTime::now();
     let tooltip_delay = s.data.as_ref().and_then(|data| {
         s.providers

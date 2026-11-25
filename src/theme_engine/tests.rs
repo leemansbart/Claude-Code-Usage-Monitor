@@ -489,6 +489,34 @@ fn templates_apply_numeric_character_formats() {
 }
 
 #[test]
+fn duration_hm_keeps_minutes_of_hours_and_hours_of_days() {
+    let context = DataContext::default();
+    for (seconds, expected) in [
+        (0.0, "now"),
+        (0.6, "now"),
+        (59.0, "59s"),
+        (60.0, "1m"),
+        (3_599.6, "59m"),
+        (3_600.0, "1h00"),
+        (11_519.7, "3h11"),
+        (11_520.0, "3h12"),
+        (86_399.0, "23h59"),
+        (86_400.0, "1d00"),
+        (183_600.0, "2d03"),
+        (-5.0, "now"),
+    ] {
+        assert_eq!(
+            format_value(seconds, "duration_hm", &context),
+            expected,
+            "{seconds}"
+        );
+    }
+    let mut dutch = DataContext::default();
+    dutch.insert_string("i18n.hour_suffix", "u");
+    assert_eq!(format_value(11_520.0, "duration_hm", &dutch), "3u12");
+}
+
+#[test]
 fn duration_short_precision_scale_and_half_steps() {
     let mut context = DataContext::default();
     context.insert_string("i18n.day_suffix", "д");
@@ -3405,7 +3433,7 @@ fn display_summaries_preserve_status_reset_formatting_and_legacy_tokens() {
         "75%"
     );
 
-    for format in ["usage_line", "usage_badge"] {
+    for format in ["usage_line", "usage_line_hm", "usage_badge"] {
         let token = format!("{{claude.session.display:{format}}}");
         context.insert("data.loading", 1.0);
         assert_eq!(format_template(&token, &context), "--");
@@ -3418,13 +3446,19 @@ fn display_summaries_preserve_status_reset_formatting_and_legacy_tokens() {
         context.insert("claude.available", 1.0);
         assert_eq!(
             format_template(&token, &context),
-            if format == "usage_line" {
-                "75% · 1h"
-            } else {
-                "75%"
+            match format {
+                "usage_line" => "75% · 1h",
+                "usage_line_hm" => "75% · 1h00",
+                _ => "75%",
             }
         );
     }
+    let template = "{claude.session:usage_line_hm} / {claude.session.display:usage_line_hm}";
+    assert!(validate_template(template, &context).is_empty());
+    assert_eq!(
+        format_template(template, &context),
+        "25% · 1h00 / 75% · 1h00"
+    );
     for invalid in [
         "claude.session.display.extra",
         "claude.session.unknown",

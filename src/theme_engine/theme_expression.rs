@@ -488,6 +488,16 @@ pub fn parse_color(source: &str) -> Option<Rgba> {
 }
 
 pub(super) fn format_usage_line(base: &str, context: &DataContext) -> Option<String> {
+    format_usage_line_with(base, context, "duration_short")
+}
+
+/// `usage_line` with the reset countdown in `duration_format`: `usage_line_hm`
+/// uses `duration_hm`, which keeps the minutes of an hour (3h12).
+pub(super) fn format_usage_line_with(
+    base: &str,
+    context: &DataContext,
+    duration_format: &str,
+) -> Option<String> {
     // Existing summaries always show consumption. A `.display` suffix opts
     // this individual token into the user's usage direction preference.
     let (base, metric) = base
@@ -588,7 +598,7 @@ pub(super) fn format_usage_line(base: &str, context: &DataContext) -> Option<Str
         .unwrap_or(0.0);
     Some(format!(
         "{percentage}% · {}",
-        format_value(seconds, "duration_short", context)
+        format_value(seconds, duration_format, context)
     ))
 }
 
@@ -651,9 +661,39 @@ pub(super) fn format_duration_short(seconds: u64, context: &DataContext) -> Stri
     }
 }
 
+/// Up to two units without spaces, the larger first: 1d03, 3h12, 45m, 30s.
+/// The lower unit is truncated, so the text changes when a whole unit elapses.
+pub(super) fn format_duration_hm(seconds: u64, context: &DataContext) -> String {
+    let days = seconds / 86_400;
+    let hours = seconds % 86_400 / 3_600;
+    let minutes = seconds % 3_600 / 60;
+    if days > 0 {
+        format!(
+            "{days}{}{hours:02}",
+            localized(context, "i18n.day_suffix", "d")
+        )
+    } else if hours > 0 {
+        format!(
+            "{hours}{}{minutes:02}",
+            localized(context, "i18n.hour_suffix", "h")
+        )
+    } else if minutes > 0 {
+        format!("{minutes}{}", localized(context, "i18n.minute_suffix", "m"))
+    } else if seconds > 0 {
+        format!("{seconds}{}", localized(context, "i18n.second_suffix", "s"))
+    } else {
+        localized(context, "i18n.now", "now").to_string()
+    }
+}
+
 pub(super) fn format_value(value: f64, format: &str, context: &DataContext) -> String {
     if let Some(value) = format_timestamp(value, format, context) {
         return value;
+    }
+    if format.eq_ignore_ascii_case("duration_hm") {
+        // Reset seconds carry a fraction; rounding to the nearest second would
+        // keep the previous minute on screen until the next countdown tick.
+        return format_duration_hm(value.max(0.0).floor() as u64, context);
     }
     if format.eq_ignore_ascii_case("duration_short") {
         let seconds = value.max(0.0).round() as u64;
