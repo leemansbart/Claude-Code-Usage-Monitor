@@ -1076,7 +1076,7 @@ fn tray_usage_summary_lines(
     language: LanguageId,
     countdown: bool,
 ) -> Vec<String> {
-    tray_usage_summary_lines_with_pools(data, providers, language, countdown, true, true)
+    tray_usage_summary_lines_with_pools(data, providers, language, countdown, true, true, None)
 }
 
 fn tray_usage_summary_lines_with_pools(
@@ -1086,6 +1086,7 @@ fn tray_usage_summary_lines_with_pools(
     countdown: bool,
     show_antigravity_gemini: bool,
     show_antigravity_external: bool,
+    detailed_at: Option<SystemTime>,
 ) -> Vec<String> {
     usage_summary_lines(
         data,
@@ -1094,8 +1095,41 @@ fn tray_usage_summary_lines_with_pools(
         countdown,
         show_antigravity_gemini,
         show_antigravity_external,
-        None,
+        detailed_at,
     )
+}
+
+/// The tray tooltip text: reset times like the widget tooltip, or the compact
+/// percentages when the detailed text would not fit behind `label` in `szTip`.
+#[allow(clippy::too_many_arguments)]
+fn tray_usage_summary_text(
+    data: &AppUsageData,
+    providers: ProviderSet,
+    language: LanguageId,
+    countdown: bool,
+    show_antigravity_gemini: bool,
+    show_antigravity_external: bool,
+    now: SystemTime,
+    label: &str,
+) -> String {
+    let summary = |detailed_at| {
+        tray_usage_summary_lines_with_pools(
+            data,
+            providers,
+            language,
+            countdown,
+            show_antigravity_gemini,
+            show_antigravity_external,
+            detailed_at,
+        )
+        .join("\n")
+    };
+    let detailed = summary(Some(now));
+    if tray_icon::tooltip_fits(label, &detailed) {
+        detailed
+    } else {
+        summary(None)
+    }
 }
 
 fn usage_summary_lines(
@@ -1215,6 +1249,9 @@ fn usage_summary_lines(
                     "{label} {weekly_label}: {}",
                     window_text(&usage.weekly)
                 ));
+                if detailed_at.is_some() {
+                    lines.extend(model_limit_lines(usage, &window_text));
+                }
                 continue;
             }
             lines.push(format!(
@@ -1233,16 +1270,46 @@ fn usage_summary_lines(
                     format!("{:.0}%", shown(usage.weekly.percentage))
                 },
             ));
+            if provider == ProviderId::Claude && detailed_at.is_some() {
+                lines.extend(model_limit_lines(usage, &window_text));
+            }
         }
     }
     lines
 }
 
-fn tray_usage_summary_from_state() -> Option<String> {
-    tray_usage_summary_for_provider_from_state(None)
+/// One line per weekly cap scoped to a single model, such as Fable. Only the
+/// detailed summaries list them: the compact tray text must leave room for
+/// every enabled provider within `szTip`.
+fn model_limit_lines<'a>(
+    usage: &'a crate::models::UsageData,
+    window_text: &'a dyn Fn(&crate::models::UsageSection) -> String,
+) -> impl Iterator<Item = String> + 'a {
+    model_limits(usage).map(|limit| format!("{}: {}", limit.label, window_text(&limit.usage)))
 }
 
-fn tray_usage_summary_for_provider_from_state(provider: Option<ProviderId>) -> Option<String> {
+/// Weekly caps scoped to one model, with the same filter as the theme
+/// engine's `claude.model.<name>` bindings.
+fn model_limits(
+    usage: &crate::models::UsageData,
+) -> impl Iterator<Item = &crate::models::UsageLimit> {
+    usage.limits.iter().filter(|limit| {
+        limit.model.is_some()
+            && matches!(
+                limit.kind.as_str(),
+                "weekly_scoped" | "seven_day_opus" | "seven_day_sonnet"
+            )
+    })
+}
+
+fn tray_usage_summary_from_state(label: &str) -> Option<String> {
+    tray_usage_summary_for_provider_from_state(None, label)
+}
+
+fn tray_usage_summary_for_provider_from_state(
+    provider: Option<ProviderId>,
+    label: &str,
+) -> Option<String> {
     let state = lock_state();
     let state = state.as_ref()?;
     let providers = provider
@@ -1260,15 +1327,17 @@ fn tray_usage_summary_for_provider_from_state(provider: Option<ProviderId>) -> O
     if !state.last_poll_ok {
         return None;
     }
-    let lines = tray_usage_summary_lines_with_pools(
+    let text = tray_usage_summary_text(
         state.data.as_ref()?,
         providers,
         state.language,
         state.usage_countdown,
         state.show_antigravity_gemini,
         state.show_antigravity_external,
+        SystemTime::now(),
+        label,
     );
-    (!lines.is_empty()).then(|| lines.join("\n"))
+    (!text.is_empty()).then_some(text)
 }
 
 fn tray_error_lines(
@@ -1316,7 +1385,7 @@ fn tray_error_lines(
 }
 
 fn tray_icon_tooltip_from_state() -> String {
-    tray_usage_summary_from_state().unwrap_or_else(|| {
+    tray_usage_summary_from_state(tray_icon::APP_NAME).unwrap_or_else(|| {
         lock_state()
             .as_ref()
             .map(|state| state.language.strings().window_title.to_string())
@@ -1327,7 +1396,6 @@ fn tray_icon_tooltip_from_state() -> String {
 fn sync_tray_icon(hwnd: HWND) {
     let hwnd = controller_for(hwnd);
     widget_tooltip::refresh();
-    let usage_tooltip = tray_usage_summary_from_state();
     let themed = {
         let state = lock_state();
         state.as_ref().and_then(|state| {
@@ -1392,19 +1460,20 @@ fn sync_tray_icon(hwnd: HWND) {
                         surface_runtime,
                         scale,
                     );
+                    let label = tray_icon::surface_label(&surface.id, &surface.name);
+                    let tooltip = match tray_icon::surface_provider(&surface.id) {
+                        Some(provider) => {
+                            tray_usage_summary_for_provider_from_state(Some(provider), &label)
+                                .unwrap_or_default()
+                        }
+                        None => tray_usage_summary_from_state(&label)
+                            .unwrap_or_else(|| surface.name.clone()),
+                    };
                     Some(tray_icon::ThemedTrayIcon {
                         surface_index,
                         surface_id: surface.id.clone(),
-                        label: tray_icon::surface_label(&surface.id, &surface.name),
-                        tooltip: match tray_icon::surface_provider(&surface.id) {
-                            Some(provider) => {
-                                tray_usage_summary_for_provider_from_state(Some(provider))
-                                    .unwrap_or_default()
-                            }
-                            None => usage_tooltip
-                                .clone()
-                                .unwrap_or_else(|| surface.name.clone()),
-                        },
+                        label,
+                        tooltip,
                         width: rendered.width,
                         height: rendered.height,
                         pixels: rendered.pixels,
@@ -3354,12 +3423,34 @@ fn schedule_countdown_timer() {
         }
     }
 
-    let min_delay = s.data.as_ref().and_then(|data| {
+    let widget_delay = s.data.as_ref().and_then(|data| {
         data.all_usage()
             .flat_map(|usage| usage.sections())
             .filter_map(|section| poller::time_until_display_change(section.resets_at))
             .min()
     });
+    // The tray tooltip is a fixed string: rewrite it when one of the reset
+    // countdowns it shows changes, including Claude's model limits.
+    let now = SystemTime::now();
+    let tooltip_delay = s.data.as_ref().and_then(|data| {
+        s.providers
+            .iter()
+            .filter_map(|provider| data.get(provider).map(|usage| (provider, usage)))
+            .flat_map(|(provider, usage)| {
+                let model_limits = (provider == ProviderId::Claude)
+                    .then(|| model_limits(usage).map(|limit| &limit.usage))
+                    .into_iter()
+                    .flatten();
+                usage.sections().chain(model_limits)
+            })
+            .filter_map(|section| {
+                section
+                    .resets_at
+                    .and_then(|reset| widget_tooltip::reset_countdown_change_in(reset, now))
+            })
+            .min()
+    });
+    let min_delay = widget_delay.into_iter().chain(tooltip_delay).min();
 
     let ms = min_delay
         .unwrap_or(Duration::from_secs(60))
@@ -4030,7 +4121,7 @@ mod language_menu_tests {
 #[cfg(test)]
 mod tray_usage_summary_tests {
     use super::*;
-    use crate::models::{UsageData, UsageSection};
+    use crate::models::{UsageData, UsageLimit, UsageSection};
 
     fn usage(session: f64, weekly: f64, weekly_label: Option<&str>) -> UsageData {
         UsageData {
@@ -4296,6 +4387,166 @@ mod tray_usage_summary_tests {
             ),
             ["Cursor 7d: 7.1% | API: 0.0%"]
         );
+    }
+
+    fn limit(key: &str, kind: &str, model: Option<&str>, percentage: f64) -> UsageLimit {
+        UsageLimit {
+            key: key.into(),
+            kind: kind.into(),
+            label: model.unwrap_or(kind).into(),
+            model: model.map(str::to_string),
+            usage: UsageSection {
+                available: true,
+                percentage,
+                resets_at: None,
+            },
+            ..Default::default()
+        }
+    }
+
+    fn claude_with_fable(now: SystemTime) -> UsageData {
+        let mut reading = usage(35.04, 72.0, None);
+        reading.session.resets_at = Some(now + Duration::from_secs(7_800));
+        reading.weekly.resets_at = Some(now + Duration::from_secs(97_200));
+        let mut fable = limit("weekly_scoped_fable", "weekly_scoped", Some("Fable"), 43.0);
+        fable.usage.resets_at = Some(now + Duration::from_secs(266_400));
+        reading.limits = vec![
+            limit("session", "session", None, 35.0),
+            limit("weekly_all", "weekly_all", None, 72.0),
+            fable,
+            limit("weekly_scoped_x", "weekly_scoped", None, 12.0),
+        ];
+        reading
+    }
+
+    #[test]
+    fn claude_summaries_list_model_limits_such_as_fable() {
+        let now = UNIX_EPOCH + Duration::from_secs(1_000_000);
+        let data = [(ProviderId::Claude, claude_with_fable(now))]
+            .into_iter()
+            .collect();
+        let providers = ProviderSet::from_enabled([ProviderId::Claude]);
+        assert_eq!(
+            usage_summary_lines(
+                &data,
+                providers,
+                LanguageId::English,
+                false,
+                true,
+                true,
+                Some(now),
+            ),
+            [
+                "Claude Code 5h: 35.0% (2h 10m) | 7d: 72.0% (1d 3h)",
+                "Fable: 43.0% (3d 2h)",
+            ]
+        );
+        assert_eq!(
+            usage_summary_lines(
+                &data,
+                providers,
+                LanguageId::English,
+                true,
+                true,
+                true,
+                Some(now),
+            ),
+            [
+                "Claude Code 5h: 65.0% (2h 10m) | 7d: 28.0% (1d 3h)",
+                "Fable: 57.0% (3d 2h)",
+            ]
+        );
+        assert_eq!(
+            tray_usage_summary_lines(&data, providers, LanguageId::English, true),
+            ["Claude Code 5h: 65% | 7d: 28%"]
+        );
+    }
+
+    #[test]
+    fn weekly_only_claude_summary_keeps_its_model_limits() {
+        let now = UNIX_EPOCH + Duration::from_secs(1_000_000);
+        let mut reading = claude_with_fable(now);
+        reading.session = UsageSection::default();
+        reading.limits[2].usage.resets_at = None;
+        let data = [(ProviderId::Claude, reading)].into_iter().collect();
+        assert_eq!(
+            usage_summary_lines(
+                &data,
+                ProviderSet::from_enabled([ProviderId::Claude]),
+                LanguageId::English,
+                false,
+                true,
+                true,
+                Some(now),
+            ),
+            ["Claude Code 7d: 72.0% (1d 3h)", "Fable: 43.0%"]
+        );
+    }
+
+    #[test]
+    fn model_limit_lines_are_claude_only() {
+        let mut reading = usage(10.0, 20.0, None);
+        reading.limits = vec![limit(
+            "weekly_scoped_fable",
+            "weekly_scoped",
+            Some("Fable"),
+            1.0,
+        )];
+        let data = [(ProviderId::Codex, reading)].into_iter().collect();
+        assert_eq!(
+            usage_summary_lines(
+                &data,
+                ProviderSet::from_enabled([ProviderId::Codex]),
+                LanguageId::English,
+                false,
+                true,
+                true,
+                Some(UNIX_EPOCH),
+            ),
+            ["Codex 5h: 10.0% | 7d: 20.0%"]
+        );
+    }
+
+    #[test]
+    fn tray_text_shows_reset_times_and_falls_back_when_too_long() {
+        let now = UNIX_EPOCH + Duration::from_secs(1_000_000);
+        let claude = ProviderSet::from_enabled([ProviderId::Claude]);
+        let data = [
+            (ProviderId::Claude, claude_with_fable(now)),
+            (ProviderId::Codex, claude_with_fable(now)),
+        ]
+        .into_iter()
+        .collect();
+        let label = tray_icon::surface_label("claude-tray-icon", "");
+        assert_eq!(
+            tray_usage_summary_text(
+                &data,
+                claude,
+                LanguageId::English,
+                false,
+                true,
+                true,
+                now,
+                &label,
+            ),
+            "Claude Code 5h: 35.0% (2h 10m) | 7d: 72.0% (1d 3h)\nFable: 43.0% (3d 2h)"
+        );
+        let both = ProviderSet::from_enabled([ProviderId::Claude, ProviderId::Codex]);
+        let text = tray_usage_summary_text(
+            &data,
+            both,
+            LanguageId::English,
+            false,
+            true,
+            true,
+            now,
+            tray_icon::APP_NAME,
+        );
+        assert_eq!(
+            text,
+            "Claude Code 5h: 35% | 7d: 72%\nCodex 5h: 35% | 7d: 72%"
+        );
+        assert!(tray_icon::tooltip_fits(tray_icon::APP_NAME, &text));
     }
 }
 

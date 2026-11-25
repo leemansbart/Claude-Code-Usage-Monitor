@@ -20,7 +20,7 @@ mod settings;
 pub(crate) use settings::cleanup_legacy_entries;
 mod provider_artwork;
 
-const APP_NAME: &str = "Claude Code Usage Monitor";
+pub(crate) const APP_NAME: &str = "Claude Code Usage Monitor";
 
 pub fn surface_provider(surface_id: &str) -> Option<crate::providers::ProviderId> {
     let key = surface_id.strip_suffix("-tray-icon")?;
@@ -46,6 +46,14 @@ pub fn surface_label(surface_id: &str, surface_name: &str) -> String {
 unsafe fn update_icon(nid: &NOTIFYICONDATAW) -> bool {
     Shell_NotifyIconW(NIM_MODIFY, nid).as_bool() || Shell_NotifyIconW(NIM_ADD, nid).as_bool()
 }
+
+/// Whether the labelled tooltip fits `szTip` (128 UTF-16 units, one of which
+/// is the terminating null) without being cut off.
+pub(crate) fn tooltip_fits(label: &str, usage: &str) -> bool {
+    labelled_tooltip(label, usage).encode_utf16().count() < TOOLTIP_CAPACITY
+}
+
+const TOOLTIP_CAPACITY: usize = 128;
 
 fn labelled_tooltip(label: &str, usage: &str) -> String {
     if usage.trim().is_empty() || usage == label {
@@ -411,13 +419,24 @@ fn copy_wide<const N: usize>(value: &str, buffer: &mut [u16; N]) {
     buffer[len] = 0;
 }
 
-fn copy_to_tip(value: &str, tooltip: &mut [u16; 128]) {
+fn copy_to_tip(value: &str, tooltip: &mut [u16; TOOLTIP_CAPACITY]) {
     copy_wide(value, tooltip);
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tooltip_fits_exactly_the_127_units_sztip_can_show() {
+        let label = "L";
+        let usage = |units: usize| "x".repeat(units - label.len() - 1);
+        assert!(tooltip_fits(label, &usage(127)));
+        assert!(!tooltip_fits(label, &usage(128)));
+        let mut tip = [0u16; TOOLTIP_CAPACITY];
+        copy_to_tip(&labelled_tooltip(label, &usage(127)), &mut tip);
+        assert_eq!(tip.iter().position(|unit| *unit == 0), Some(127));
+    }
 
     #[test]
     fn provider_labels_identify_each_icon_and_custom_roots_keep_their_name() {

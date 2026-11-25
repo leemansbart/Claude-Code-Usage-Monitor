@@ -78,6 +78,10 @@ pub(super) unsafe extern "system" fn wnd_proc(
                 }
                 TIMER_COUNTDOWN => {
                     render_layered();
+                    // Wakes whenever a reset countdown in the tray tooltip changes text.
+                    suppress_tray_reposition_for(Duration::from_millis(
+                        TRAY_ICON_UPDATE_REPOSITION_SUPPRESS_MS,
+                    ));
                     sync_tray_icon(hwnd);
                     schedule_countdown_timer();
                 }

@@ -70,6 +70,23 @@ pub(super) fn reset_countdown(reset: SystemTime, now: SystemTime, strings: &Stri
     }
 }
 
+/// How long until `reset_countdown` shows different text. The tray tooltip is
+/// a fixed string rather than one built on hover, so it is rewritten then.
+pub(super) fn reset_countdown_change_in(reset: SystemTime, now: SystemTime) -> Option<Duration> {
+    let seconds = reset.duration_since(now).ok()?.as_secs();
+    if seconds == 0 {
+        return None;
+    }
+    let unit = if seconds >= 86_400 {
+        3_600
+    } else if seconds >= 60 {
+        60
+    } else {
+        1
+    };
+    Some(Duration::from_secs(seconds % unit + 1))
+}
+
 fn content(owner: HWND) -> Option<(String, bool, HWND)> {
     let state = lock_state();
     let state = state.as_ref()?;
@@ -379,6 +396,31 @@ mod tests {
         assert_eq!(
             reset_countdown(now - Duration::from_secs(1), now, &strings),
             "now"
+        );
+    }
+
+    #[test]
+    fn countdown_change_lands_on_the_first_second_with_new_text() {
+        let now = UNIX_EPOCH + Duration::from_secs(1_000_000);
+        let strings = LanguageId::English.strings();
+        for seconds in [
+            183_600, 183_599, 90_000, 86_400, 11_520, 3_600, 3_599, 65, 60, 59, 1,
+        ] {
+            let reset = now + Duration::from_secs(seconds);
+            let delay = reset_countdown_change_in(reset, now).unwrap();
+            let text = reset_countdown(reset, now, &strings);
+            let before = now + delay - Duration::from_secs(1);
+            assert_eq!(reset_countdown(reset, before, &strings), text, "{seconds}s");
+            assert_ne!(
+                reset_countdown(reset, now + delay, &strings),
+                text,
+                "{seconds}s"
+            );
+        }
+        assert_eq!(reset_countdown_change_in(now, now), None);
+        assert_eq!(
+            reset_countdown_change_in(now - Duration::from_secs(5), now),
+            None
         );
     }
 }
